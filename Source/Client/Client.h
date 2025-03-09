@@ -3,6 +3,12 @@
 #include <boost/asio.hpp>
 #include <filesystem>
 
+enum class MessageType
+{
+    TEXT,
+    FILE,
+};
+
 class Client
 {
 public:

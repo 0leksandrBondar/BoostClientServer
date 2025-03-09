@@ -4,12 +4,15 @@ project(Server)
 
 set(Source
         Main.cpp
+        Server.h
+        Server.cpp
 )
 
 add_executable(${PROJECT_NAME} ${Source})
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
         Boost::asio
+        spdlog::spdlog
 )
 
 
