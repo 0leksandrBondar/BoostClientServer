@@ -21,10 +21,66 @@ void Server::accept()
                                if (!ec)
                                {
                                    spdlog::info("New client connected!");
-                                   listenForData(socket);
+                                   receiveData(socket);
                                }
                                accept();
                            });
+}
+
+void Server::receiveData(std::shared_ptr<boost::asio::ip::tcp::socket> socket)
+{
+    auto headerSizeBuffer = std::make_shared<uint8_t>(0);
+    boost::asio::async_read(
+        *socket, boost::asio::buffer(headerSizeBuffer.get(), sizeof(uint8_t)),
+        [this, socket, headerSizeBuffer](boost::system::error_code ec, std::size_t)
+        {
+            if (!ec)
+            {
+                uint8_t headerSize = *headerSizeBuffer;
+
+                if (headerSize == 0 || headerSize > 50)
+                {
+                    spdlog::error("Invalid header size: {}", headerSize);
+                    return;
+                }
+
+                auto headerBuffer = std::make_shared<std::vector<char>>(headerSize);
+                boost::asio::async_read(*socket, boost::asio::buffer(*headerBuffer),
+                                        [this, socket, headerBuffer](boost::system::error_code ec,
+                                                                     std::size_t bytesRead)
+                                        {
+                                            if (!ec)
+                                            {
+                                                std::string header(headerBuffer->begin(),
+                                                                   headerBuffer->end());
+                                                spdlog::info("Received header: {}", header);
+
+                                                if (header == "TEXT")
+                                                {
+                                                    receiveText(socket);
+                                                }
+                                                else if (header == "FILE")
+                                                {
+                                                    receiveFile(socket);
+                                                }
+                                                else
+                                                {
+                                                    spdlog::warn("Unknown data type: {}", header);
+                                                    receiveData(socket);
+                                                }
+                                            }
+                                            else
+                                            {
+                                                spdlog::warn("Client disconnected: {}",
+                                                             ec.message());
+                                            }
+                                        });
+            }
+            else
+            {
+                spdlog::warn("Client disconnected: {}", ec.message());
+            }
+        });
 }
 
 void Server::receiveFile(std::shared_ptr<boost::asio::ip::tcp::socket> socket)
@@ -61,7 +117,7 @@ void Server::receiveFile(std::shared_ptr<boost::asio::ip::tcp::socket> socket)
                          totalReceived, fileSize);
         }
         spdlog::info("File received successfully! Saved to: {}", filePath.string());
-        listenForData(socket);
+        receiveData(socket);
     }
     catch (const std::exception& e)
     {
@@ -71,54 +127,44 @@ void Server::receiveFile(std::shared_ptr<boost::asio::ip::tcp::socket> socket)
 
 void Server::receiveText(std::shared_ptr<boost::asio::ip::tcp::socket> socket)
 {
-    auto buffer = std::make_shared<std::array<char, 1024>>();
-    socket->async_read_some(boost::asio::buffer(*buffer),
-                            [this, socket, buffer](boost::system::error_code ec, std::size_t length)
-                            {
-                                if (!ec)
-                                {
-                                    std::string message(buffer->data(), length);
-                                    spdlog::info("Received text: {} ({} bytes)", message, length);
-                                    listenForData(socket);
-                                }
-                                else
-                                {
-                                    spdlog::error("Receiving text failed: {}", ec.message());
-                                }
-                            });
-}
+    auto textSizeBuffer = std::make_shared<uint32_t>(0);
+    boost::asio::async_read(
+        *socket, boost::asio::buffer(textSizeBuffer.get(), sizeof(uint32_t)),
+        [this, socket, textSizeBuffer](boost::system::error_code ec, std::size_t)
+        {
+            if (!ec)
+            {
+                uint32_t textSize = *textSizeBuffer;
+                if (textSize == 0 || textSize > 4096)
+                {
+                    spdlog::error("Invalid text size: {}", textSize);
+                    return;
+                }
 
-void Server::listenForData(std::shared_ptr<boost::asio::ip::tcp::socket> socket)
-{
-    auto buffer = std::make_shared<std::array<char, 4>>();
-    boost::asio::async_read(*socket, boost::asio::buffer(*buffer),
-                            [this, socket, buffer](boost::system::error_code ec,
-                                                   std::size_t bytesRead)
-                            {
-                                if (!ec)
-                                {
-                                    std::string header(buffer->data(), 4);
-                                    spdlog::info("Received header: {} ({} bytes)", header,
-                                                 bytesRead);
-                                    if (header == "TEXT")
-                                    {
-                                        receiveText(socket);
-                                    }
-                                    else if (header == "FILE")
-                                    {
-                                        receiveFile(socket);
-                                    }
-                                    else
-                                    {
-                                        spdlog::error("Unknown message type!");
-                                        listenForData(socket);
-                                    }
-                                }
-                                else
-                                {
-                                    spdlog::warn("Client disconnected: {}", ec.message());
-                                }
-                            });
+                auto buffer = std::make_shared<std::vector<char>>(textSize);
+                boost::asio::async_read(*socket, boost::asio::buffer(*buffer),
+                                        [this, socket, buffer](boost::system::error_code ec,
+                                                               std::size_t length)
+                                        {
+                                            if (!ec)
+                                            {
+                                                std::string message(buffer->begin(), buffer->end());
+                                                spdlog::info("Received text: {} ({} bytes)",
+                                                             message, length);
+                                                receiveData(socket);
+                                            }
+                                            else
+                                            {
+                                                spdlog::error("Receiving text failed: {}",
+                                                              ec.message());
+                                            }
+                                        });
+            }
+            else
+            {
+                spdlog::error("Receiving text size failed: {}", ec.message());
+            }
+        });
 }
 
 std::filesystem::path Server::getDesktopPath()

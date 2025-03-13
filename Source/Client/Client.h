@@ -16,9 +16,7 @@ public:
     Client(const std::string& ip, const std::string& port);
 
     void connect(const std::string& ip, const std::string& port);
-
-    void sendText(const std::string& message);
-    void sendFile(const std::filesystem::path& filePath);
+    void sendData(const std::string& type, const std::string& data);
 
 private:
     static size_t getFileSize(std::ifstream& file);

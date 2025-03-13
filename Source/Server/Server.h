@@ -13,8 +13,10 @@ public:
 private:
     void accept();
 
-    void receiveFile(std::shared_ptr<boost::asio::ip::tcp::socket> socket);
+    void receiveData(std::shared_ptr<boost::asio::ip::tcp::socket> socket);
     void receiveText(std::shared_ptr<boost::asio::ip::tcp::socket> socket);
+    void receiveFile(std::shared_ptr<boost::asio::ip::tcp::socket> socket);
+
     void listenForData(std::shared_ptr<boost::asio::ip::tcp::socket> socket);
 
     std::filesystem::path getDesktopPath();

@@ -1,7 +1,7 @@
 #include "Client.h"
 
+#include <spdlog/spdlog.h>
 #include <fstream>
-#include <iostream>
 
 Client::Client(const std::string& ip, const std::string& port)
     : _socket{ _ioContext }, _resolver{ _ioContext }
@@ -16,73 +16,72 @@ void Client::connect(const std::string& ip, const std::string& port)
     {
         const auto endpoints = _resolver.resolve(ip, port);
         boost::asio::connect(_socket, endpoints);
-        std::cout << "Connected to " << ip << ":" << port << std::endl;
+        spdlog::info("Connected to {}:{}", ip, port);
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Connection failed: " << e.what() << std::endl;
+        spdlog::error("Connection failed: {}", e.what());
     }
 }
 
-void Client::sendText(const std::string& message)
+void Client::sendData(const std::string& type, const std::string& data)
 {
     try
     {
-        std::string header = "TEXT";
-        boost::asio::write(_socket, boost::asio::buffer(header));
-        boost::asio::write(_socket, boost::asio::buffer(message));
+        uint8_t headerSize = static_cast<uint8_t>(type.size());
+        boost::asio::write(_socket, boost::asio::buffer(&headerSize, sizeof(headerSize)));
+        boost::asio::write(_socket, boost::asio::buffer(type));
 
-        std::cout << "Sent text: " << message << " (" << message.size() << " bytes)" << std::endl;
+        if (type == "TEXT")
+        {
+            uint32_t textSize = static_cast<uint32_t>(data.size());
+            boost::asio::write(_socket, boost::asio::buffer(&textSize, sizeof(textSize)));
+            boost::asio::write(_socket, boost::asio::buffer(data));
+            spdlog::info("Sent text: {} ({} bytes)", data, data.size());
+        }
+        else if (type == "FILE")
+        {
+            std::ifstream file(data, std::ios::binary);
+            if (!file)
+            {
+                spdlog::error("Error: Could not open file {}", data);
+                return;
+            }
+
+            size_t fileSize = getFileSize(file);
+            boost::asio::write(_socket, boost::asio::buffer(&fileSize, sizeof(fileSize)));
+
+            spdlog::info("Sending file: {} ({} bytes)", data, fileSize);
+
+            constexpr size_t bufferSize = 4096;
+            char buffer[bufferSize];
+
+            while (file)
+            {
+                file.read(buffer, bufferSize);
+                const std::streamsize bytesRead = file.gcount();
+                boost::asio::write(_socket, boost::asio::buffer(buffer, bytesRead));
+            }
+
+            spdlog::info("File sent successfully!");
+        }
+        else
+        {
+            spdlog::warn("Unknown data type: {}", type);
+        }
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Send failed: " << e.what() << std::endl;
+        spdlog::error("Data send failed: {}", e.what());
     }
 }
 
-void Client::sendFile(const std::filesystem::path& filePath)
-{
-    try
-    {
-        std::ifstream file(filePath, std::ios::binary);
-        if (!file)
-        {
-            std::cerr << "Error: Could not open file " << filePath << std::endl;
-            return;
-        }
 
-        size_t fileSize = getFileSize(file);
-
-        std::string header = "FILE";
-        boost::asio::write(_socket, boost::asio::buffer(header));
-        boost::asio::write(_socket, boost::asio::buffer(&fileSize, sizeof(fileSize)));
-
-        std::cout << "Sending file: " << filePath.filename() << " (" << fileSize << " bytes)"
-                  << std::endl;
-
-        constexpr size_t bufferSize = 4096;
-        char buffer[bufferSize];
-
-        while (file)
-        {
-            file.read(buffer, bufferSize);
-            const std::streamsize bytesRead = file.gcount();
-            boost::asio::write(_socket, boost::asio::buffer(buffer, bytesRead));
-        }
-
-        std::cout << "File sent successfully!" << std::endl;
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "File send failed: " << e.what() << std::endl;
-    }
-}
 
 size_t Client::getFileSize(std::ifstream& file)
 {
     file.seekg(0, std::ios::end);
     const size_t fileSize = file.tellg();
     file.seekg(0, std::ios::beg);
-
     return fileSize;
 }
