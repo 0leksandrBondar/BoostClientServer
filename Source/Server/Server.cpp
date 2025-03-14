@@ -91,19 +91,28 @@ void Server::receiveFile(std::shared_ptr<boost::asio::ip::tcp::socket> socket)
         boost::asio::read(*socket, boost::asio::buffer(&fileSize, sizeof(fileSize)));
         spdlog::info("Receiving file of size: {} bytes", fileSize);
 
+        uint8_t extensionSize;
+        boost::asio::read(*socket, boost::asio::buffer(&extensionSize, sizeof(extensionSize)));
+        std::vector<char> extensionBuffer(extensionSize);
+        boost::asio::read(*socket, boost::asio::buffer(extensionBuffer));
+        std::string fileExtension(extensionBuffer.begin(), extensionBuffer.end());
+
+        spdlog::info("File extension: {}", fileExtension);
+
         std::filesystem::path desktopPath = getDesktopPath();
         if (desktopPath.empty())
         {
             spdlog::error("Could not determine desktop path!");
             return;
         }
-        std::filesystem::path filePath = desktopPath / "receivedData.mp4";
+        std::filesystem::path filePath = desktopPath / ("receivedData" + fileExtension);
         std::ofstream outputFile(filePath, std::ios::binary);
         if (!outputFile)
         {
             spdlog::error("Could not create file at {}", filePath.string());
             return;
         }
+
         constexpr size_t bufferSize = 4096;
         char buffer[bufferSize];
         size_t totalReceived = 0;
@@ -116,6 +125,7 @@ void Server::receiveFile(std::shared_ptr<boost::asio::ip::tcp::socket> socket)
             spdlog::info("Received packet: {} bytes (Total: {} / {} bytes)", bytesRead,
                          totalReceived, fileSize);
         }
+
         spdlog::info("File received successfully! Saved to: {}", filePath.string());
         receiveData(socket);
     }

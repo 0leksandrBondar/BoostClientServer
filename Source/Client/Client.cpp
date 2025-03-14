@@ -51,6 +51,11 @@ void Client::sendData(const std::string& type, const std::string& data)
             size_t fileSize = getFileSize(file);
             boost::asio::write(_socket, boost::asio::buffer(&fileSize, sizeof(fileSize)));
 
+            std::string fileExtension = std::filesystem::path(data).extension().string();
+            uint8_t extensionSize = static_cast<uint8_t>(fileExtension.size());
+            boost::asio::write(_socket, boost::asio::buffer(&extensionSize, sizeof(extensionSize)));
+            boost::asio::write(_socket, boost::asio::buffer(fileExtension));
+
             spdlog::info("Sending file: {} ({} bytes)", data, fileSize);
 
             constexpr size_t bufferSize = 4096;
@@ -75,8 +80,6 @@ void Client::sendData(const std::string& type, const std::string& data)
         spdlog::error("Data send failed: {}", e.what());
     }
 }
-
-
 
 size_t Client::getFileSize(std::ifstream& file)
 {
