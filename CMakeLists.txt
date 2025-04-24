@@ -9,3 +9,5 @@ add_subdirectory(Source/Client)
 add_subdirectory(Source/Server)
 add_subdirectory(Dependencies/Boost)
 add_subdirectory(Dependencies/SpdLog)
+add_subdirectory(Dependencies/Json)
+

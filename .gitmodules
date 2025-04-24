@@ -4,3 +4,9 @@
 [submodule "Dependencies/SpdLog"]
 	path = Dependencies/SpdLog
 	url = https://github.com/gabime/spdlog.git
+[submodule "Dependencies/ProtoBuff"]
+	path = Dependencies/ProtoBuff
+	url = https://github.com/protocolbuffers/protobuf.git
+[submodule "Dependencies/Json"]
+	path = Dependencies/Json
+	url = https://github.com/nlohmann/json.git

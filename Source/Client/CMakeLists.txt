@@ -13,6 +13,7 @@ add_executable(${PROJECT_NAME} ${Source})
 target_link_libraries(${PROJECT_NAME} PUBLIC
         Boost::asio
         spdlog::spdlog
+        nlohmann_json::nlohmann_json
 )
 
 
