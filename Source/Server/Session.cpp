@@ -9,7 +9,10 @@
 #include <shlobj.h>
 #include <windows.h>
 
-Session::Session(boost::asio::ip::tcp::socket socket) : _socket(std::move(socket)) {}
+Session::Session(boost::asio::ip::tcp::socket socket, Server& server)
+    : _socket(std::move(socket)), _server(server)
+{
+}
 
 void Session::start() { readHeader(); }
 
@@ -57,17 +60,40 @@ void Session::readBody()
                             });
 }
 
+void Session::sendRaw(const std::string& data)
+{
+    uint32_t len = data.size();
+    std::vector<boost::asio::const_buffer> buffers
+        = { boost::asio::buffer(&len, sizeof(len)), boost::asio::buffer(data) };
+    boost::asio::async_write(_socket, buffers,
+                             [](boost::system::error_code ec, std::size_t)
+                             {
+                                 if (ec)
+                                 {
+                                     spdlog::error("Failed to send message: {}", ec.message());
+                                 }
+                             });
+}
+
 bool Session::is_base64(unsigned char c) { return isalnum(c) || c == '+' || c == '/'; }
 
 void Session::handleMessage(const std::string& json_text)
 {
     const nlohmann::json msg = nlohmann::json::parse(json_text);
-
     const std::string type = msg["type"];
-    const std::string encoded_data = msg["data"];
-    const std::string receiver = msg["receiver"];
+
+    if (type == "REGISTER")
+    {
+        _clientName = msg["sender"];
+        _server.registerClient(_clientName, shared_from_this());
+        spdlog::info("Client '{}' registered", _clientName);
+        return;
+    }
+
     const std::string sender = msg.value("sender", "unknown");
+    const std::string receiver = msg.value("receiver", "unknown");
     const std::string filename = msg.value("filename", "unnamed");
+    const std::string encoded_data = msg.value("data", "");
 
     auto decoded = base64Decode(encoded_data);
 
@@ -77,8 +103,16 @@ void Session::handleMessage(const std::string& json_text)
     }
     else if (type == "TEXT")
     {
-        std::string message(decoded.begin(), decoded.end());
-        processText(sender, receiver, message);
+        auto targetSession = _server.getClientSession(receiver);
+        if (targetSession)
+        {
+            targetSession->sendRaw(json_text);
+            spdlog::info("Message from '{}' to '{}'", sender, receiver);
+        }
+        else
+        {
+            spdlog::warn("User '{}' not found for message from '{}'", receiver, sender);
+        }
     }
     else
     {
